@@ -1,6 +1,6 @@
+
 import streamlit as st
 import google.generativeai as genai
-import speech_recognition as sr
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.playback import play
@@ -39,7 +39,6 @@ def text_to_speech(text):
         audio = AudioSegment.from_mp3(temp_path)
         play(audio)
     finally:
-        audio.close()  # Ensure the audio file is closed
         os.remove(temp_path)
 
 # Function to read content from an uploaded file
@@ -141,38 +140,10 @@ def app():
             if response:
                 st.write(response)
                 text_to_speech(response)
-                st.stop()  # Stop Streamlit after showing the response
             else:
                 st.write("No valid response could be generated.")
     
-    # Section 2: Voice Input
-    st.markdown('<h2 class="section-title">Voice Input</h2>', unsafe_allow_html=True)
-    recognizer = sr.Recognizer()
-    st.write("Click the button and speak your query...")
-    if st.button("Record Voice", key='voice_record', help="Record your voice query"):
-        with sr.Microphone() as source:
-            st.write("Listening...")
-            audio_data = recognizer.listen(source)
-            st.write("Recognizing...")
-            try:
-                question = recognizer.recognize_google(audio_data)
-                st.write(f"Recognized: {question}")
-                
-                response = get_gemini_response(question, prompt)
-                
-                if response:
-                    st.balloons()
-                    st.write(response)
-                    text_to_speech(response)
-                    st.stop()  # Stop Streamlit after showing the response
-                else:
-                    st.write("No valid response could be generated.")
-            except sr.UnknownValueError:
-                st.write("Google Speech Recognition could not understand the audio.")
-            except sr.RequestError as e:
-                st.write(f"Could not request results from Google Speech Recognition service; {e}")
-
-    # Section 3: File Upload
+    # Section 2: File Upload
     st.markdown('<h2 class="section-title">Upload a File</h2>', unsafe_allow_html=True)
     st.markdown('<div class="upload-section">', unsafe_allow_html=True)
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'docx'])
@@ -186,7 +157,6 @@ def app():
                 if response:
                     st.markdown('<div class="file-content">{}</div>'.format(response), unsafe_allow_html=True)
                     text_to_speech(response)
-                    st.stop()  # Stop Streamlit after showing the response
                 else:
                     st.write("No valid response could be generated from the file content.")
         else:
