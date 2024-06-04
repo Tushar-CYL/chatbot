@@ -1,5 +1,7 @@
 streamlit
 google-generativeai
 SpeechRecognition
-gTTS
+gtts
 pydub
+PyMuPDF
+python-docx
