@@ -1,4 +1,3 @@
-
 import streamlit as st
 import google.generativeai as genai
 from gtts import gTTS
@@ -25,51 +24,70 @@ prompt = [
 
 # Function to retrieve response from GenAI for a given question
 def get_gemini_response(question, prompt):
-    model = genai.GenerativeModel('gemini-pro')
-    response = model.generate_content([prompt[0], question])
-    return response.text
+    try:
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content([prompt[0], question])
+        return response.text
+    except Exception as e:
+        st.error(f"Error getting response from GenAI: {e}")
+        return None
 
 # Function to convert text to speech and play it
 def text_to_speech(text):
-    tts = gTTS(text=text, lang='en')
-    temp_fd, temp_path = tempfile.mkstemp(suffix=".mp3")
-    os.close(temp_fd)
     try:
-        tts.save(temp_path)
-        audio = AudioSegment.from_mp3(temp_path)
-        play(audio)
-    finally:
-        os.remove(temp_path)
+        tts = gTTS(text=text, lang='en')
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".mp3")
+        os.close(temp_fd)
+        try:
+            tts.save(temp_path)
+            audio = AudioSegment.from_mp3(temp_path)
+            play(audio)
+        finally:
+            os.remove(temp_path)
+    except Exception as e:
+        st.error(f"Error in text-to-speech conversion: {e}")
 
 # Function to read content from an uploaded file
 def read_uploaded_file(file):
-    if file is not None:
-        file_type = file.type
-        if 'pdf' in file_type:
-            return read_pdf(file)
-        elif 'wordprocessingml' in file_type:
-            return read_docx(file)
-        else:
-            st.write("Unsupported file type.")
-            return None
-    return None
+    try:
+        if file is not None:
+            file_type = file.type
+            if 'pdf' in file_type:
+                return read_pdf(file)
+            elif 'wordprocessingml' in file_type:
+                return read_docx(file)
+            else:
+                st.error("Unsupported file type.")
+                return None
+        return None
+    except Exception as e:
+        st.error(f"Error reading uploaded file: {e}")
+        return None
 
 # Function to read text from PDF file
 def read_pdf(file):
-    pdf_document = fitz.open(stream=file.read(), filetype="pdf")
-    text = ""
-    for page_num in range(len(pdf_document)):
-        page = pdf_document.load_page(page_num)
-        text += page.get_text()
-    return text
+    try:
+        pdf_document = fitz.open(stream=file.read(), filetype="pdf")
+        text = ""
+        for page_num in range(len(pdf_document)):
+            page = pdf_document.load_page(page_num)
+            text += page.get_text()
+        return text
+    except Exception as e:
+        st.error(f"Error reading PDF file: {e}")
+        return ""
 
 # Function to read text from DOCX file
 def read_docx(file):
-    doc = docx.Document(file)
-    full_text = []
-    for para in doc.paragraphs:
-        full_text.append(para.text)
-    return '\n'.join(full_text)
+    try:
+        doc = docx.Document(file)
+        full_text = []
+        for para in doc.paragraphs:
+            full_text.append(para.text)
+        return '\n'.join(full_text)
+    except Exception as e:
+        st.error(f"Error reading DOCX file: {e}")
+        return ""
 
 # Function to extract relevant content and get response from GenAI
 def analyze_and_respond(file_content):
@@ -141,7 +159,7 @@ def app():
                 st.write(response)
                 text_to_speech(response)
             else:
-                st.write("No valid response could be generated.")
+                st.error("No valid response could be generated.")
     
     # Section 2: File Upload
     st.markdown('<h2 class="section-title">Upload a File</h2>', unsafe_allow_html=True)
@@ -158,8 +176,8 @@ def app():
                     st.markdown('<div class="file-content">{}</div>'.format(response), unsafe_allow_html=True)
                     text_to_speech(response)
                 else:
-                    st.write("No valid response could be generated from the file content.")
+                    st.error("No valid response could be generated from the file content.")
         else:
-            st.write("Please upload a file.")
+            st.error("Please upload a file.")
 
 app()
