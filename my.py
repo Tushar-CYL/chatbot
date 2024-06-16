@@ -1,21 +1,74 @@
 import streamlit as st
 import google.generativeai as genai
-from gtts import gTTS
-from pydub import AudioSegment
-from pydub.playback import play
-import tempfile
-import os
 import fitz  # PyMuPDF for PDF files
 import docx  # python-docx for DOCX files
+import sqlite3
 
 # Google API Key for GenAI
 GOOGLE_API_KEY = 'AIzaSyDlfQowL4ytEsQ8rBn6XJb1ED3QUCUksFo'
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# Streamlit page configuration
-st.set_page_config(page_title="Chatlop", page_icon="🤖", layout="wide")
+# Initialize database
+def init_db():
+    conn = sqlite3.connect('chatbot.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY,
+            role TEXT,
+            content TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS file_analysis (
+            id INTEGER PRIMARY KEY,
+            filename TEXT,
+            content TEXT,
+            response TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# Prompt for GenAI
+init_db()
+
+# Save a chat message to the database
+def save_message(role, content):
+    conn = sqlite3.connect('chatbot.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO messages (role, content) VALUES (?, ?)', (role, content))
+    conn.commit()
+    conn.close()
+
+# Retrieve all chat messages from the database
+def get_all_messages():
+    conn = sqlite3.connect('chatbot.db')
+    c = conn.cursor()
+    c.execute('SELECT role, content FROM messages ORDER BY timestamp')
+    messages = c.fetchall()
+    conn.close()
+    return messages
+
+# Save a file analysis result to the database
+def save_file_analysis(filename, content, response):
+    conn = sqlite3.connect('chatbot.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO file_analysis (filename, content, response) VALUES (?, ?, ?)', (filename, content, response))
+    conn.commit()
+    conn.close()
+
+# Retrieve all file analysis results from the database
+def get_file_analyses():
+    conn = sqlite3.connect('chatbot.db')
+    c = conn.cursor()
+    c.execute('SELECT filename, content, response FROM file_analysis ORDER BY timestamp')
+    analyses = c.fetchall()
+    conn.close()
+    return analyses
+
+# Define prompt
 prompt = [
     """
     You are an expert in providing detailed and accurate answers to questions based on your vast knowledge. Answer the following questions to the best of your ability.
@@ -100,28 +153,30 @@ def app():
 
     st.markdown('<h1 class="main-title">Welcome to Chatlop</h1>', unsafe_allow_html=True)
 
-    # Sidebar for navigation
     option = st.sidebar.selectbox(
         'Choose an option',
-        ['Chat with Bot', 'Upload Document']
+        ['Chat with Bot', 'Upload Document', 'History']
     )
 
     if option == 'Chat with Bot':
         st.markdown('<h2 class="section-title">Chat with the Bot 🤖</h2>', unsafe_allow_html=True)
         if "messages" not in st.session_state:
             st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
+            for role, content in get_all_messages():
+                st.session_state["messages"].append({"role": role, "content": content})
         
         for msg in st.session_state.messages:
             st.chat_message(msg["role"]).write(msg["content"])
         
-        if prompt := st.chat_input():
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.chat_message("user").write(prompt)
-            response = get_gemini_response(prompt, prompt)
+        if user_input := st.chat_input():
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            st.chat_message("user").write(user_input)
+            save_message("user", user_input)
+            response = get_gemini_response(user_input, prompt)
             if response:
-                msg = response
-                st.session_state.messages.append({"role": "assistant", "content": msg})
-                st.chat_message("assistant").write(msg)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.chat_message("assistant").write(response)
+                save_message("assistant", response)
             else:
                 st.error("No valid response could be generated.")
     
@@ -138,6 +193,7 @@ def app():
                     response = analyze_and_respond(file_content)
                     if response:
                         st.markdown('<div class="file-content">{}</div>'.format(response), unsafe_allow_html=True)
+                        save_file_analysis(uploaded_file.name, file_content, response)
                     else:
                         st.error("No valid response could be generated from the file content.")
             else:
@@ -145,6 +201,15 @@ def app():
     
     elif option == 'History':
         st.markdown('<h2 class="section-title">History 📜</h2>', unsafe_allow_html=True)
-        st.write("This section can be used to display the history of interactions or uploaded files.")
+        st.write("Chat History:")
+        messages = get_all_messages()
+        for role, content in messages:
+            st.markdown(f"**{role.capitalize()}**: {content}")
+        st.write("File Analysis History:")
+        analyses = get_file_analyses()
+        for filename, content, response in analyses:
+            st.markdown(f"**File**: {filename}")
+            st.markdown(f"**Content**: {content}")
+            st.markdown(f"**Response**: {response}")
 
 app()
