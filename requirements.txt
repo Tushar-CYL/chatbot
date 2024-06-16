@@ -1,6 +1,4 @@
 streamlit
 google-generativeai
-gtts
-pydub
-pymupdf
+PyMuPDF
 python-docx
