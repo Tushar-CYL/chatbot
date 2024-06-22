@@ -1,16 +1,23 @@
 import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, auth, exceptions
 import google.generativeai as genai
 import fitz  # PyMuPDF for PDF files
 import docx  # python-docx for DOCX files
 import sqlite3
 
-# Google API Key for GenAI
+# Configure GenAI API Key
 GOOGLE_API_KEY = 'AIzaSyDlfQowL4ytEsQ8rBn6XJb1ED3QUCUksFo'
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# Initialize database
+# Initialize Firebase app
+if not firebase_admin._apps:
+    cred = credentials.Certificate("chatlop-95584fcac5a6.json")
+    firebase_admin.initialize_app(cred)
+
+# Initialize SQLite database
 def init_db():
-    conn = sqlite3.connect('chatbot.db')
+    conn = sqlite3.connect('chatlop.db')
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS messages (
@@ -36,7 +43,7 @@ init_db()
 
 # Save a chat message to the database
 def save_message(role, content):
-    conn = sqlite3.connect('chatbot.db')
+    conn = sqlite3.connect('chatlop.db')
     c = conn.cursor()
     c.execute('INSERT INTO messages (role, content) VALUES (?, ?)', (role, content))
     conn.commit()
@@ -44,7 +51,7 @@ def save_message(role, content):
 
 # Retrieve all chat messages from the database
 def get_all_messages():
-    conn = sqlite3.connect('chatbot.db')
+    conn = sqlite3.connect('chatlop.db')
     c = conn.cursor()
     c.execute('SELECT role, content FROM messages ORDER BY timestamp')
     messages = c.fetchall()
@@ -53,7 +60,7 @@ def get_all_messages():
 
 # Save a file analysis result to the database
 def save_file_analysis(filename, content, response):
-    conn = sqlite3.connect('chatbot.db')
+    conn = sqlite3.connect('chatlop.db')
     c = conn.cursor()
     c.execute('INSERT INTO file_analysis (filename, content, response) VALUES (?, ?, ?)', (filename, content, response))
     conn.commit()
@@ -61,14 +68,14 @@ def save_file_analysis(filename, content, response):
 
 # Retrieve all file analysis results from the database
 def get_file_analyses():
-    conn = sqlite3.connect('chatbot.db')
+    conn = sqlite3.connect('chatlop.db')
     c = conn.cursor()
     c.execute('SELECT filename, content, response FROM file_analysis ORDER BY timestamp')
     analyses = c.fetchall()
     conn.close()
     return analyses
 
-# Define prompt
+# Define prompt for GenAI
 prompt = [
     """
     You are an expert in providing detailed and accurate answers to questions based on your vast knowledge. Answer the following questions to the best of your ability.
@@ -132,7 +139,28 @@ def analyze_and_respond(file_content):
     response = get_gemini_response(file_content, prompt)
     return response
 
-# Main function
+# Function to handle Firebase email/password authentication
+def authenticate_user(email, password):
+    try:
+        user = auth.get_user_by_email(email)
+        if user:
+            st.session_state["username"] = user.uid
+            st.session_state["useremail"] = user.email
+            st.session_state["signedout"] = True
+            st.success("Login Successful!")
+            return True
+    except exceptions.FirebaseError as e:
+        st.warning(f"Authentication failed: {str(e)}")
+        return False
+
+# Function to log out the user
+def logout():
+    st.session_state["signedout"] = False
+    st.session_state["username"] = ""
+    st.session_state["useremail"] = ""
+    st.success("Logged out successfully.")
+
+# Main app function
 def app():
     st.markdown("""
         <style>
@@ -153,34 +181,71 @@ def app():
 
     st.markdown('<h1 class="main-title">Welcome to Chatlop</h1>', unsafe_allow_html=True)
 
+    # Initialize session_state for storing messages and history
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
+    if "history" not in st.session_state:
+        st.session_state["history"] = []
+
+    # Sidebar option selection
     option = st.sidebar.selectbox(
         'Choose an option',
-        ['Chat with Bot', 'Upload Document', 'History']
+        ['Chat with Bot', 'Upload Document']
     )
 
+    # Display chosen option content
     if option == 'Chat with Bot':
         st.markdown('<h2 class="section-title">Chat with the Bot 🤖</h2>', unsafe_allow_html=True)
-        if "messages" not in st.session_state:
-            st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
-            for role, content in get_all_messages():
-                st.session_state["messages"].append({"role": role, "content": content})
         
-        for msg in st.session_state.messages:
+        for msg in st.session_state["messages"]:
             st.chat_message(msg["role"]).write(msg["content"])
         
         if user_input := st.chat_input():
-            st.session_state.messages.append({"role": "user", "content": user_input})
+            st.session_state["messages"].append({"role": "user", "content": user_input})
             st.chat_message("user").write(user_input)
             save_message("user", user_input)
             response = get_gemini_response(user_input, prompt)
             if response:
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.session_state["messages"].append({"role": "assistant", "content": response})
                 st.chat_message("assistant").write(response)
                 save_message("assistant", response)
             else:
                 st.error("No valid response could be generated.")
-    
+
     elif option == 'Upload Document':
+        # Ensure login or signup is required for file upload
+        if not st.session_state.get("signedout", False):
+            st.markdown('<h2 class="section-title">Login or Sign Up</h2>', unsafe_allow_html=True)
+            choice = st.selectbox('Login/Signup', ['Login', 'Sign up'])
+            
+            if choice == 'Login':
+                email = st.text_input('Email Address')
+                password = st.text_input('Password', type='password')
+                if st.button('Login'):
+                    if email and password:
+                        authenticated = authenticate_user(email, password)
+                        if authenticated:
+                            st.success("Login Successful!")
+                        else:
+                            st.warning("Login Failed.")
+                    else:
+                        st.warning("Please enter email and password.")
+            
+            elif choice == 'Sign up':
+                email = st.text_input('Email Address')
+                password = st.text_input('Password', type='password')
+                if st.button('Sign up'):
+                    if email and password:
+                        try:
+                            user = auth.create_user(email=email, password=password)
+                            st.success('Account created successfully!')
+                        except exceptions.FirebaseError as e:
+                            st.warning(f"Sign up failed: {str(e)}")
+                    else:
+                        st.warning("Please enter email and password.")
+
+            st.stop()
+
         st.markdown('<h2 class="section-title">Upload a File 📔</h2>', unsafe_allow_html=True)
         st.markdown('<div class="upload-section">', unsafe_allow_html=True)
         uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'docx'])
@@ -198,18 +263,17 @@ def app():
                         st.error("No valid response could be generated from the file content.")
             else:
                 st.error("Please upload a file.")
-    
-    elif option == 'History':
-        st.markdown('<h2 class="section-title">History 📜</h2>', unsafe_allow_html=True)
-        st.write("Chat History:")
-        messages = get_all_messages()
-        for role, content in messages:
-            st.markdown(f"**{role.capitalize()}**: {content}")
-        st.write("File Analysis History:")
-        analyses = get_file_analyses()
-        for filename, content, response in analyses:
-            st.markdown(f"**File**: {filename}")
-            st.markdown(f"**Content**: {content}")
-            st.markdown(f"**Response**: {response}")
 
-app()
+    # History section
+    st.markdown('<h2 class="section-title">History</h2>', unsafe_allow_html=True)
+    if st.session_state["history"]:
+        for item in st.session_state["history"]:
+            st.write(item)
+    else:
+        st.write("No search history available.")
+
+    # Update history when the page is refreshed
+    st.session_state["history"] = []
+
+if __name__ == '__main__':
+    app()
