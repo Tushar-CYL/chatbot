@@ -7,14 +7,6 @@ import tempfile
 import os
 import fitz  # PyMuPDF for PDF files
 import docx  # python-docx for DOCX files
-from pymongo import MongoClient
-from datetime import datetime
-
-# MongoDB setup
-MONGO_URI = "mongodb+srv://lnttushar:E1sW2TOb5aPgy5kt@chatlop.k3bxg9r.mongodb.net/?retryWrites=true&w=majority&appName=chatlop"
-client = MongoClient(MONGO_URI)
-db = client.chatlop_db
-collection = db.conversations
 
 GOOGLE_API_KEY = 'AIzaSyDlfQowL4ytEsQ8rBn6XJb1ED3QUCUksFo'
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -79,12 +71,6 @@ def analyze_and_respond(file_content):
     response = get_gemini_response(file_content, prompt)
     return response
 
-def save_to_mongo(data):
-    try:
-        collection.insert_one(data)
-    except Exception as e:
-        st.error(f"Error saving to MongoDB: {e}")
-
 def app():
     st.markdown("""
     <style>
@@ -107,7 +93,7 @@ def app():
 
     option = st.sidebar.selectbox(
         'Choose an option',
-        ['Chat with Bot', 'Upload Document', 'History']
+        ['Chat with Bot', 'Upload Document']
     )
 
     if option == 'Chat with Bot':
@@ -118,20 +104,14 @@ def app():
         for msg in st.session_state.messages:
             st.chat_message(msg["role"]).write(msg["content"])
         
-        if user_prompt := st.chat_input():
-            st.session_state.messages.append({"role": "user", "content": user_prompt})
-            st.chat_message("user").write(user_prompt)
-            response = get_gemini_response(user_prompt, prompt)
+        if prompt := st.chat_input():
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.chat_message("user").write(prompt)
+            response = get_gemini_response(prompt, prompt)
             if response:
                 msg = response
                 st.session_state.messages.append({"role": "assistant", "content": msg})
                 st.chat_message("assistant").write(msg)
-                # Save conversation to MongoDB
-                save_to_mongo({
-                    "timestamp": datetime.now(),
-                    "user_message": user_prompt,
-                    "bot_response": msg
-                })
             else:
                 st.error("No valid response could be generated.")
 
@@ -148,13 +128,6 @@ def app():
                     response = analyze_and_respond(file_content)
                     if response:
                         st.markdown('<div class="file-content">{}</div>'.format(response), unsafe_allow_html=True)
-                        # Save file analysis to MongoDB
-                        save_to_mongo({
-                            "timestamp": datetime.now(),
-                            "file_name": uploaded_file.name,
-                            "file_content": file_content,
-                            "analysis_response": response
-                        })
                     else:
                         st.error("No valid response could be generated from the file content.")
             else:
@@ -162,19 +135,6 @@ def app():
 
     elif option == 'History':
         st.markdown('<h2 class="section-title">History 📜</h2>', unsafe_allow_html=True)
-        history = list(collection.find().sort("timestamp", -1))
-        if history:
-            for record in history:
-                st.write(f"Timestamp: {record['timestamp']}")
-                if "user_message" in record:
-                    st.write(f"User: {record['user_message']}")
-                    st.write(f"Bot: {record['bot_response']}")
-                if "file_name" in record:
-                    st.write(f"File: {record['file_name']}")
-                    st.write(f"File Content: {record['file_content']}")
-                    st.write(f"Analysis: {record['analysis_response']}")
-                st.write("---")
-        else:
-            st.write("No history available.")
+        st.write("This section can be used to display the history of interactions or uploaded files.")
 
 app()
