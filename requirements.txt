@@ -1,5 +1,6 @@
 streamlit
-firebase-admin
 google-generativeai
+gtts
+pydub
 pymupdf
 python-docx
