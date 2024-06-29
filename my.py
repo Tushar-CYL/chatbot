@@ -11,7 +11,7 @@ from pymongo import MongoClient
 from datetime import datetime
 
 # MongoDB setup
-MONGO_URI = "mongodb://localhost:27017"
+MONGO_URI = "mongodb+srv://lnttushar:E1sW2TOb5aPgy5kt@chatlop.k3bxg9r.mongodb.net/?retryWrites=true&w=majority&appName=chatlop"
 client = MongoClient(MONGO_URI)
 db = client.chatlop_db
 collection = db.conversations
@@ -118,10 +118,10 @@ def app():
         for msg in st.session_state.messages:
             st.chat_message(msg["role"]).write(msg["content"])
         
-        if prompt := st.chat_input():
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.chat_message("user").write(prompt)
-            response = get_gemini_response(prompt, prompt)
+        if user_prompt := st.chat_input():
+            st.session_state.messages.append({"role": "user", "content": user_prompt})
+            st.chat_message("user").write(user_prompt)
+            response = get_gemini_response(user_prompt, prompt)
             if response:
                 msg = response
                 st.session_state.messages.append({"role": "assistant", "content": msg})
@@ -129,7 +129,7 @@ def app():
                 # Save conversation to MongoDB
                 save_to_mongo({
                     "timestamp": datetime.now(),
-                    "user_message": prompt,
+                    "user_message": user_prompt,
                     "bot_response": msg
                 })
             else:
