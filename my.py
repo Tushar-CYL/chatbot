@@ -8,7 +8,7 @@ import os
 import fitz  # PyMuPDF for PDF files
 import docx  # python-docx for DOCX files
 
-GOOGLE_API_KEY = 'AIzaSyDlfQowL4ytEsQ8rBn6XJb1ED3QUCUksFo'
+GOOGLE_API_KEY = 'AIzaSyAhPdM6jGrv-CTRuI6tqOrd4qXmyObJnpY'
 genai.configure(api_key=GOOGLE_API_KEY)
 
 st.set_page_config(page_title="Chatlop", page_icon="🤖", layout="wide")
