@@ -174,7 +174,7 @@ import docx  # python-docx for DOCX files
 from datetime import datetime
 
 # Replace with your actual API key or use environment variables
-GOOGLE_API_KEY = 'AIzaSyDLlgyR6PMeaJPRvLMBqezBCa9HIvvfu8Q'
+GOOGLE_API_KEY = 'AIzaSyATZ0NDoTweYu3S3KQBlLBo0PljHvViK30'
 genai.configure(api_key=GOOGLE_API_KEY)
 
 st.set_page_config(page_title="Chatlop", page_icon="🤖", layout="wide")
